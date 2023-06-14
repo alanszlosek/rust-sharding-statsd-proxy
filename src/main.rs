@@ -6,6 +6,15 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::convert::TryInto;
 
+use ini::Ini;
+
+struct Settings<'a> {
+    bind_address: String,
+    bind_port: u32,
+    // bind this lifetime to struct lifetime ... i think that's what's happening here
+    destinations: Vec<&'a str>
+}
+
 fn main() {
     // TODO: make this configurable
     let destinations = ["192.168.3.74:5002", "192.168.1.120:5002"];
@@ -13,10 +22,39 @@ fn main() {
 
     let socket: UdpSocket = UdpSocket::bind(bind_address).expect("Could not bind");
     let mut running = true;
-    let re = Regex::new(r"[,:]").expect("Failed to compile regex");
-    let num_shards= destinations.len() as u64;
 
-    println!("Listening on {}, sharding to: {:?}", bind_address, destinations);
+    // StatsD metrics parsing helpers
+    let re = Regex::new(r"[,:]").expect("Failed to compile regex");
+    let separators = &[',', ':'];
+
+    let mut settings = Settings {
+        bind_address: String::from("0.0.0.0"),
+        bind_port: 5001,
+        destinations: Vec::new()
+    };
+
+    // QUICK AND DIRTY AND PANICKABLE
+    println!("Loading settings from config.ini");
+    let i = Ini::load_from_file("config.ini").unwrap();
+    let general = i.general_section();
+    if general.contains_key("bind_address") {
+        // TODO: check for valid interface address
+        settings.bind_address = String::from( general.get("bind_address").unwrap() );
+    }
+    if general.contains_key("bind_port") {
+        // TODO: error handling for invalid port
+        settings.bind_port = general.get("bind_port").unwrap().parse().unwrap();
+    }
+    if general.contains_key("destinations") {
+        // TODO: error handling for invalid port
+        settings.destinations = general.get("destinations").unwrap().split(' ').collect();
+    }
+    
+
+
+
+
+    println!("Listening on {}:{}, sharding to: {:?}", settings.bind_address, settings.bind_port, settings.destinations);
 
     // buffer of 1024
     // TODO: choose something larger than max UDP packet size
@@ -38,7 +76,12 @@ fn main() {
         let data = str::from_utf8(&buf[..amt]).unwrap();
         for line in data.lines() {
             // TODO: properly handle empty lines
-            let mut parts: Vec<&str> = re.split(line).collect();
+
+            // Split string with Regular Expression
+            //let mut parts: Vec<&str> = re.split(line).collect();
+
+            // Split string without Regular Expression
+            let mut parts: Vec<&str> = line.split(separators).collect();
             // TODO: handle case where parts isn't a Vec with 2+
 
             // If we ensure parts has expected num elements, these are safe
@@ -56,7 +99,7 @@ fn main() {
             help: you can convert a `u64` to a `usize` and panic if the converted value doesn't fit
             let shard_number: usize = (s.finish() % num_shards).try_into().unwrap();
             */
-            let shard_number: usize = (s.finish() % num_shards).try_into().unwrap();
+            let shard_number: usize = (s.finish() % (settings.destinations.len() as u64)).try_into().unwrap();
 
             socket.send_to(line.as_bytes(), destinations[shard_number]).expect("Failed to send");
 
