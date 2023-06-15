@@ -7,55 +7,65 @@ use std::hash::{Hash, Hasher};
 use std::convert::TryInto;
 
 use ini::Ini;
+use std::net::Ipv4Addr;
+use std::str::FromStr;
 
 struct Settings<'a> {
-    bind_address: String,
+    bind_interface: &'a str,
     bind_port: u32,
     // bind this lifetime to struct lifetime ... i think that's what's happening here
     destinations: Vec<&'a str>
 }
 
 fn main() {
-    // TODO: make this configurable
-    let destinations = ["192.168.3.74:5002", "192.168.1.120:5002"];
-    let bind_address = "0.0.0.0:5001";
-
-    let socket: UdpSocket = UdpSocket::bind(bind_address).expect("Could not bind");
     let mut running = true;
-
+    
     // StatsD metrics parsing helpers
     let re = Regex::new(r"[,:]").expect("Failed to compile regex");
     let separators = &[',', ':'];
 
+    let default_interface = "0.0.0.0";
+    let default_port: u32 = 5001;
+    
     let mut settings = Settings {
-        bind_address: String::from("0.0.0.0"),
-        bind_port: 5001,
+        bind_interface: default_interface,
+        bind_port: default_port,
         destinations: Vec::new()
     };
-
-    // QUICK AND DIRTY AND PANICKABLE
+    
+    // QUICK AND DIRTY - NEEDS MORE EDGE CASE HANDLING
     println!("Loading settings from config.ini");
     let i = Ini::load_from_file("config.ini").unwrap();
     let general = i.general_section();
-    if general.contains_key("bind_address") {
-        // TODO: check for valid interface address
-        settings.bind_address = String::from( general.get("bind_address").unwrap() );
-    }
-    if general.contains_key("bind_port") {
+
+    settings.bind_interface = match general.get("bind_interface") {
+        Some(val) => match Ipv4Addr::from_str(val) {
+            Ok(_) => val,
+            Err(_) => {
+                println!("Invalid IP Address, falling back to {}", default_interface);
+                default_interface
+            },
+        },
+        None => default_interface
+    };
+    settings.bind_port = match general.get("bind_port") {
         // TODO: error handling for invalid port
-        settings.bind_port = general.get("bind_port").unwrap().parse().unwrap();
-    }
+        Some(val) => val.parse().unwrap(),
+        None => default_port
+    };
     if general.contains_key("destinations") {
-        // TODO: error handling for invalid port
-        settings.destinations = general.get("destinations").unwrap().split(' ').collect();
+        // TODO: verify valid IP address and port
     }
+    settings.destinations = match general.get("destinations") {
+        Some(val) => val.split(' ').collect(),
+        None => Vec::new()
+    };
     
+    let a = format!("{}:{}", settings.bind_interface, settings.bind_port);
 
-
-
-
-    println!("Listening on {}:{}, sharding to: {:?}", settings.bind_address, settings.bind_port, settings.destinations);
-
+    println!("Listening on {}, sharding to: {:?}", a, settings.destinations);
+    let socket: UdpSocket = UdpSocket::bind(a).expect("Could not bind");
+    
     // buffer of 1024
     // TODO: choose something larger than max UDP packet size
     let mut buf = [0; 1024];
@@ -101,7 +111,7 @@ fn main() {
             */
             let shard_number: usize = (s.finish() % (settings.destinations.len() as u64)).try_into().unwrap();
 
-            socket.send_to(line.as_bytes(), destinations[shard_number]).expect("Failed to send");
+            socket.send_to(line.as_bytes(), settings.destinations[shard_number]).expect("Failed to send");
 
             num_metrics += 1;
         }
