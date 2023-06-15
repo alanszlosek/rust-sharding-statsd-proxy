@@ -7,11 +7,11 @@ use std::hash::{Hash, Hasher};
 use std::convert::TryInto;
 
 use ini::Ini;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
 
 struct Settings<'a> {
-    bind_interface: &'a str,
+    bind_interface: IpAddr,
     bind_port: u32,
     // bind this lifetime to struct lifetime ... i think that's what's happening here
     destinations: Vec<&'a str>
@@ -24,11 +24,11 @@ fn main() {
     let re = Regex::new(r"[,:]").expect("Failed to compile regex");
     let separators = &[',', ':'];
 
-    let default_interface = "0.0.0.0";
     let default_port: u32 = 5001;
     
     let mut settings = Settings {
-        bind_interface: default_interface,
+        // have to wrap in the enum variant to satisfy the IpAddr type declaration
+        bind_interface: std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED),
         bind_port: default_port,
         destinations: Vec::new()
     };
@@ -39,14 +39,11 @@ fn main() {
     let general = i.general_section();
 
     settings.bind_interface = match general.get("bind_interface") {
-        Some(val) => match Ipv4Addr::from_str(val) {
-            Ok(_) => val,
-            Err(_) => {
-                println!("Invalid IP Address, falling back to {}", default_interface);
-                default_interface
-            },
-        },
-        None => default_interface
+        // Parse/convert str to IpAddr
+        // Fail if IP isn't valid. Don't fall back to a default because in production, that unexpected behavior
+        // would get lost in log files and could be a potential security risk.
+        Some(val) => val.parse().unwrap(),
+        None => std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED)
     };
     settings.bind_port = match general.get("bind_port") {
         // TODO: error handling for invalid port
