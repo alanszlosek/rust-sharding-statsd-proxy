@@ -63,6 +63,7 @@ fn main() {
     println!("Listening on {}, sharding to: {:?}", a, settings.destinations);
     let socket: UdpSocket = UdpSocket::bind(a).expect("Could not bind");
     
+    let num_destinations = settings.destinations.len() as u64;
     // buffer of 1024
     // TODO: choose something larger than max UDP packet size
     let mut buf = [0; 1024];
@@ -106,7 +107,7 @@ fn main() {
             help: you can convert a `u64` to a `usize` and panic if the converted value doesn't fit
             let shard_number: usize = (s.finish() % num_shards).try_into().unwrap();
             */
-            let shard_number: usize = (s.finish() % (settings.destinations.len() as u64)).try_into().unwrap();
+            let shard_number: usize = (s.finish() % num_destinations).try_into().unwrap();
 
             socket.send_to(line.as_bytes(), settings.destinations[shard_number]).expect("Failed to send");
 
