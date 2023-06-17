@@ -80,7 +80,7 @@ fn main() {
             */
             let shard_number: usize = (s.finish() % num_destinations).try_into().unwrap();
 
-            socket.send_to(line.as_bytes(), settings.destinations[shard_number]).expect("Failed to send");
+            socket.send_to(line.as_bytes(), &settings.destinations[shard_number]).expect("Failed to send");
 
             num_metrics += 1;
         }

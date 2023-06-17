@@ -1,63 +1,57 @@
-use serde::{Serialize, Deserialize};
-use serde_yaml;
-use std::{net::{IpAddr, Ipv4Addr}, iter::FromIterator};
-use std::fs;
+use std::{net::{IpAddr, Ipv4Addr}, iter::FromIterator, io::Read};
 use std::fs::File;
+use regex::Regex;
 
 const DEFAULT_PORT: u32 = 5001;
 
-fn default_interface() -> String {
-    String::from("0.0.0.0")
-}
-fn default_port() -> u32 {
-    5001
-}
-fn default_destinations() -> Vec<String> {
-    Vec::<String>::new()
-}
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
-    #[serde(default = "default_interface")]
     pub bind_interface: String,
-    #[serde(default = "default_port")]
     pub bind_port: u32,
-    // bind this lifetime to struct lifetime ... i think that's what's happening here
-    #[serde(default = "default_destinations")]
     pub destinations: Vec<String>
 }
 
 
 impl Settings {
     pub fn load<'a>(filename: &str) -> Self {
-        match fs::read_to_string(filename) {
-            Ok(yaml) => match serde_yaml::from_str(yaml.as_str()) {
-                Ok(val) => val,
-                Err(_) => serde_yaml::from_str("").unwrap()
-            },
-            Err(_) => serde_yaml::from_str("").unwrap()
+        let mut contents = String::new();
+        let f = File::open(filename);
+        if f.is_ok() {
+            if ! f.unwrap().read_to_string(&mut contents).is_ok() {
+                println!("Failed to read config.ini contents");
+            }
+        } else {
+            println!("Failed to read config.ini")
         }
-        /*
-        Settings {
-            bind_interface: match i.general_section().get("bind_interface") {
-                // Parse/convert str to IpAddr
-                // Fail if IP isn't valid. Don't fall back to a default because in production, that unexpected behavior
-                // would get lost in log files and could be a potential security risk.
-                Some(val) => val.parse().unwrap(),
-                None => std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED)
-            },
-            bind_port: match i.general_section().get("bind_port") {
-                // TODO: error handling for invalid port
-                Some(val) => val.parse().unwrap(),
-                None => DEFAULT_PORT
-            },
-            destinations: Vec::new().extend(
-                match i.general_section().get("destinations") {
-                    Some(val) => val.split_whitespace().collect(),
-                    None => Vec::new()
+
+        let re = Regex::new(r"(bind_interface|bind_port|destinations)\s*=\s*([^\n]+)").expect("Failed to compile regex");
+
+        let mut bind_interface = String::new();
+        let mut bind_port = 5001;
+        let mut destinations = Vec::<String>::new();
+
+        for cap in re.captures_iter(contents.as_str()) {
+            match &cap[1] {
+                "bind_interface" => {
+                    bind_interface = String::from(&cap[2]);
+                },
+                "bind_port" => {
+                    bind_port = cap[2].parse().unwrap();
                 }
-            )
+                "destinations" => {
+                    // TODO: ensure valid IP address and port
+                    destinations = cap[2].split(' ').map(|i|  String::from(i)).collect()
+                },
+                _ => println!("Other: {:?}", cap)
+            }
         }
-        */
+        
+
+        Settings {
+            bind_interface: bind_interface,
+            bind_port: bind_port,
+            destinations: destinations
+        }
+
     }
 }
