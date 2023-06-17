@@ -6,16 +6,14 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::convert::TryInto;
 
-use ini::Ini;
 use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
 
-struct Settings<'a> {
-    bind_interface: IpAddr,
-    bind_port: u32,
-    // bind this lifetime to struct lifetime ... i think that's what's happening here
-    destinations: Vec<&'a str>
-}
+mod settings;
+
+
+
+
 
 fn main() {
     let mut running = true;
@@ -23,40 +21,11 @@ fn main() {
     // StatsD metrics parsing helpers
     let re = Regex::new(r"[,:]").expect("Failed to compile regex");
     let separators = &[',', ':'];
-
-    let default_port: u32 = 5001;
     
-    let mut settings = Settings {
-        // have to wrap in the enum variant to satisfy the IpAddr type declaration
-        bind_interface: std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-        bind_port: default_port,
-        destinations: Vec::new()
-    };
-    
-    // QUICK AND DIRTY - NEEDS MORE EDGE CASE HANDLING
     println!("Loading settings from config.ini");
-    let i = Ini::load_from_file("config.ini").unwrap();
-    let general = i.general_section();
+    let settings = settings::Settings::load("config.ini");
 
-    settings.bind_interface = match general.get("bind_interface") {
-        // Parse/convert str to IpAddr
-        // Fail if IP isn't valid. Don't fall back to a default because in production, that unexpected behavior
-        // would get lost in log files and could be a potential security risk.
-        Some(val) => val.parse().unwrap(),
-        None => std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED)
-    };
-    settings.bind_port = match general.get("bind_port") {
-        // TODO: error handling for invalid port
-        Some(val) => val.parse().unwrap(),
-        None => default_port
-    };
-    if general.contains_key("destinations") {
-        // TODO: verify valid IP address and port
-    }
-    settings.destinations = match general.get("destinations") {
-        Some(val) => val.split(' ').collect(),
-        None => Vec::new()
-    };
+
     
     let a = format!("{}:{}", settings.bind_interface, settings.bind_port);
 
@@ -85,11 +54,12 @@ fn main() {
         for line in data.lines() {
             // TODO: properly handle empty lines
 
+            // Splitting with Regular Expressions is so much faster than string split()
             // Split string with Regular Expression
-            //let mut parts: Vec<&str> = re.split(line).collect();
-
+            let mut parts: Vec<&str> = re.split(line).collect();
             // Split string without Regular Expression
-            let mut parts: Vec<&str> = line.split(separators).collect();
+            //let mut parts: Vec<&str> = line.split(separators).collect();
+
             // TODO: handle case where parts isn't a Vec with 2+
 
             // If we ensure parts has expected num elements, these are safe
@@ -100,6 +70,7 @@ fn main() {
             parts.insert(0, measurement);
             let shardable_metric = parts.join(",");
 
+            // TODO: implement djb hash function to learn bitwise ops
             let mut s = DefaultHasher::new();
             shardable_metric.hash(&mut s);
 
