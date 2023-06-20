@@ -53,3 +53,13 @@ $ python3 statsd.py
 ```
 
 Use Control+C to quit.
+
+# Performance anecdotes
+
+Original single-threaded version could process around 1.3-1.6 million messages per 10 seconds.
+
+Two-thread version with channels could process around that much as well. But the problem with channels is they support multiple producers not multiple consumers. And we need more threads processing and sharding the messages that arrive.
+
+In order to have multiple processing/sharding threads, I switched to using a Mutex and Arc around a Vec<String>. With 2 threads it was able to process 2.3 million, and three threads could process 3 million. So a definite improvement. And memory no longer grows like it did when using channels. Maybe I didn't configure the channel correctly.
+
+At this point it's possible I'm saturating my loopback, or some other system setting. But I'm pleased to have experimented through the improvements.
