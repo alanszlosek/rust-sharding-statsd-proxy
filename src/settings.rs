@@ -27,7 +27,7 @@ impl Settings {
         let re = Regex::new(r"(bind_interface|bind_port|destinations)\s*=\s*([^\n]+)").expect("Failed to compile regex");
 
         let mut bind_interface = String::new();
-        let mut bind_port = 5001;
+        let mut bind_port = DEFAULT_PORT;
         let mut destinations = Vec::<String>::new();
 
         for cap in re.captures_iter(contents.as_str()) {
