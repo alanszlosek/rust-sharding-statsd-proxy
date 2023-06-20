@@ -39,7 +39,7 @@ fn main() {
     println!("Listening on {}, sharding to: {:?}", a, settings.destinations);
     
     // tuple of bytes up to 1024, followed by length of byte data
-    let (tx, rx) = mpsc::channel::<([u8;1024], usize)>();
+    let (tx, rx) = mpsc::channel::<String>();
     // Processing thread
     let re = Regex::new(r"[,:]").expect("Failed to compile regex");
     // StatsD metrics parsing helpers
@@ -49,9 +49,7 @@ fn main() {
     let sender = UdpSocket::bind("0.0.0.0:0").expect("Could not bind sender UDP socket");
     thread::spawn(move || {
         for received in rx {
-            let msg = &received.0[ ..received.1];
-            let data = str::from_utf8(msg).unwrap();
-            for line in data.lines() {
+            for line in received.lines() {
                 // TODO: properly handle empty lines
 
                 // Splitting with Regular Expressions is so much faster than string split()
@@ -117,7 +115,7 @@ fn main() {
         // copy data?
         //let data = Box::from(buf);
         // unbox it (deref the pointer?)
-        tx.send( (buf, amt) ).unwrap();
+        tx.send( String::from( str::from_utf8(&buf[..amt]).unwrap() ) );
     }
 
 }
