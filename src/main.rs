@@ -1,5 +1,6 @@
 use regex::Regex;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::net::UdpSocket;
@@ -7,15 +8,10 @@ use std::str;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
-use std::collections::VecDeque;
 
 mod settings;
 
-// MEMORY SEEMS TO GROW NOW, ODDLY
-
 fn main() {
-    // TODO: make this configurable in INI file, so folks can use the desired number of CPU cores
-    let num_threads = 3;
     // TODO: catch TERM signal and use this to gracefully shutdown
     let mut running = true;
     // When this proxy receives StatsD messages, we push them on this vec/queue for processing in other threads
@@ -30,13 +26,13 @@ fn main() {
     let settings = settings::Settings::load("config.ini");
     let a = format!("{}:{}", settings.bind_interface, settings.bind_port);
     println!(
-        "Listening on {}\nSharding to: {:?}",
-        a, settings.destinations
+        "Listening on {}\nThreads: {}\nSharding to: {:?}",
+        a, settings.threads, settings.destinations
     );
 
     // PROCESSING THREADS
     let num_destinations = settings.destinations.len() as u64;
-    for _ in 0..num_threads {
+    for _ in 0..settings.threads {
         let cloned_mutex = Arc::clone(&mutex);
         let destinations = settings.destinations.clone();
         let handle = thread::spawn(move || {
@@ -126,7 +122,6 @@ fn main() {
         handles.push(handle);
     }
 
-
     // RECEIVING SOCKET
     let socket: UdpSocket = UdpSocket::bind(a).expect("Could not bind");
     // TODO: make this configurable in INI .... max_udp_packet_size or something
@@ -136,7 +131,7 @@ fn main() {
         {
             let mut q = mutex.lock().unwrap();
             // TODO: is there a way to enqueue the buf directly?
-            q.push_back( String::from(str::from_utf8(&buf[..amt]).unwrap()) );
+            q.push_back(String::from(str::from_utf8(&buf[..amt]).unwrap()));
         }
     }
 }

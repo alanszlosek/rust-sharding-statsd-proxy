@@ -20,16 +20,16 @@ graph TD
 
 # Current Features
 
-* Hardcoded shard configuration
-    * Number of shards
+* Configured using INI file
+    * Bind interface and port
+	* Number of processing threads (set this to according to your CPU cores)
     * IP addresses of downstream Telegraf+StatsD servers
 * Receives StatsD messages, 1 or more per UDP packet
-* Shards the metric+tags string to one of N downstream servers as UDP
+* Queues incoming StatsD packets, and uses processing threads to shard and send metrics to one of N downstream servers
 
 # Future Work
 
-* Configuration via file and commandline flags
-* Queue incoming StatsD packets, and use a processing thread to take advantage of multiple CPU cores
+* Configuration via commandline flags
 * Batch outgoing StatsD metrics up to max UDP packet size to reduce number of UDP packets
 
 # Running it
@@ -60,6 +60,6 @@ Original single-threaded version could process around 1.3-1.6 million messages p
 
 Two-thread version with channels could process around that much as well. But the problem with channels is they support multiple producers not multiple consumers. And we need more threads processing and sharding the messages that arrive.
 
-In order to have multiple processing/sharding threads, I switched to using a Mutex and Arc around a Vec<String>. With 2 threads it was able to process 2.3 million, and three threads could process 3.3 million. So a definite improvement. And memory no longer grows like it did when using channels. Maybe I didn't configure the channel correctly.
+In order to have multiple processing/sharding threads, I switched to using a Mutex and Arc around a Vec<String>. With 2 threads it was able to process 2.2 million, and three threads could process 2.4 million. So a definite improvement. And memory no longer grows like it did when using channels. Maybe I didn't configure the channel correctly.
 
 At this point it's possible I'm saturating my loopback, or some other system setting. But I'm pleased to have experimented through the improvements.

@@ -12,6 +12,7 @@ pub struct Settings {
     pub bind_interface: String,
     pub bind_port: u32,
     pub destinations: Vec<String>,
+    pub threads: u8,
 }
 
 impl Settings {
@@ -26,12 +27,13 @@ impl Settings {
             println!("Failed to read config.ini")
         }
 
-        let re = Regex::new(r"(bind_interface|bind_port|destinations)\s*=\s*([^\n]+)")
+        let re = Regex::new(r"(bind_interface|bind_port|destinations|threads)\s*=\s*([^\n]+)")
             .expect("Failed to compile regex");
 
         let mut bind_interface = String::new();
         let mut bind_port = DEFAULT_PORT;
         let mut destinations = Vec::<String>::new();
+        let mut threads: u8 = 1;
 
         for cap in re.captures_iter(contents.as_str()) {
             match &cap[1] {
@@ -45,6 +47,9 @@ impl Settings {
                     // TODO: ensure valid IP address and port
                     destinations = cap[2].split(' ').map(|i| String::from(i)).collect()
                 }
+                "threads" => {
+                    threads = cap[2].parse().unwrap();
+                }
                 _ => println!("Other: {:?}", cap),
             }
         }
@@ -53,6 +58,7 @@ impl Settings {
             bind_interface: bind_interface,
             bind_port: bind_port,
             destinations: destinations,
+            threads: threads,
         }
     }
 }
