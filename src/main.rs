@@ -15,7 +15,7 @@ fn main() {
     // TODO: catch TERM signal and use this to gracefully shutdown
     let mut running = true;
     // When this proxy receives StatsD messages, we push them on this vec/queue for processing in other threads
-    let mut queue: VecDeque<String> = VecDeque::new();
+    let mut queue: VecDeque<Vec<u8>> = VecDeque::new();
     // Create an atomically-reference-counted mutex around our vec/queue
     let mutex = Arc::new(Mutex::new(queue));
     // TODO: implement graceful shutdown and wait for these threads
@@ -46,6 +46,11 @@ fn main() {
             // We use this socket to send proxied+sharded metrics to a downstream StatsD server
             let sender = UdpSocket::bind("0.0.0.0:0").expect("Could not bind sender UDP socket");
 
+            let comma = ',' as u8;
+            let colon = ':' as u8;
+            let comma_ref = [comma];
+            let colon_ref = [colon];
+
             loop {
                 // Acquire a mutex lock and unwrap the associated vec/queue
                 let mut q = cloned_mutex.lock().unwrap();
@@ -57,14 +62,17 @@ fn main() {
                 }
 
                 let message = q.pop_front().unwrap();
+                //let message = str::from_utf8(&message).unwrap();
                 // Releasing the mutex ASAP gets us at least another 1 million messages processed
                 // per 10 seconds
                 drop(q);
 
-                for line in message.lines() {
+                //for line in message.lines() {
+                for line in message.split(|a| *a == 10 || *a == 13) {
                     // Splitting with Regular Expressions is so much faster than string split()
                     // Split StatsD metric into: MEASUREMENT TAG1 TAG2 ... TYPE|VALUE
-                    let mut parts: Vec<&str> = re.split(line).collect();
+                    //let mut parts: Vec<&str> = re.split(line).collect();
+                    let mut parts: Vec<&[u8]> = line.split(|b| *b == comma || *b == colon).collect();
 
                     // If we don't have at least a measurement and TYPE|VALUE, go to next line
                     if parts.len() < 2 {
@@ -72,18 +80,22 @@ fn main() {
                     }
 
                     // Remove the measurement ...
-                    let measurement: &str = parts.remove(0);
+                    let measurement = parts.remove(0);
                     // Remove the type and value
-                    let _measurement_type: &str = parts.pop().unwrap();
+                    let _measurement_type = parts.pop().unwrap();
                     // Left are tags ... sort them so we can ensure consistent sharding
                     parts.sort();
+
                     // Push measurement back onto the front
                     parts.insert(0, measurement);
                     // Join measurement and tags into a string we can hash to shards
-                    let shardable_metric = parts.join(",");
+                    let shardable_metric = parts.join(&comma);
 
+                    
                     // Hash into a shard number
+                    // But this seems to cause memory leaks
                     // TODO: implement djb hash function to learn bitwise ops
+
                     let mut s = DefaultHasher::new();
                     shardable_metric.hash(&mut s);
                     /*
@@ -95,8 +107,8 @@ fn main() {
                     // Send the original line to the appropriate downstream server
                     // to avoid the extra string op of pushing the type+value onto the shardable_metric string
                     sender
-                        .send_to(line.as_bytes(), &destinations[shard_number])
-                        .expect("Failed to send");
+                    .send_to(line, &destinations[shard_number])
+                    .expect("Failed to send");
                     // TODO: batch metrics up to MTU to reduce number of UDP packets we send
 
                     // Increment tally of how many messages this thread has processed and sent
@@ -131,7 +143,7 @@ fn main() {
         {
             let mut q = mutex.lock().unwrap();
             // TODO: is there a way to enqueue the buf directly?
-            q.push_back(String::from(str::from_utf8(&buf[..amt]).unwrap()));
+            q.push_back( buf[..amt].to_owned() );
         }
     }
 }
