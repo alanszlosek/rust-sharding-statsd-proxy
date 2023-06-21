@@ -6,6 +6,7 @@ use std::net::UdpSocket;
 use std::str;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time;
 
 mod settings;
 
@@ -14,9 +15,6 @@ mod settings;
 fn main() {
     let num_threads = 3;
     let mut running = true;
-    // buffer of 1024
-    // TODO: choose something larger than max UDP packet size
-    let mut buf = [0; 1024];
 
     let mut queue: Vec<String> = Vec::new();
     let mutex = Arc::new(Mutex::new(queue));
@@ -39,12 +37,15 @@ fn main() {
         let cloned_mutex = Arc::clone(&mutex);
         let destinations = settings.destinations.clone();
         let handle = thread::spawn(move || {
+            let ten_millis = time::Duration::from_millis(10);
             let re = Regex::new(r"[,:]").expect("Failed to compile regex");
             let sender = UdpSocket::bind("0.0.0.0:0").expect("Could not bind sender UDP socket");
 
             loop {
                 let mut q = cloned_mutex.lock().unwrap();
                 if q.len() == 0 {
+                    drop(q);
+                    thread::sleep(ten_millis);
                     continue;
                 }
 
@@ -120,6 +121,8 @@ fn main() {
 
     // RECEIVING SOCKET
     let socket: UdpSocket = UdpSocket::bind(a).expect("Could not bind");
+    // TODO: choose something larger than max UDP packet size
+    let mut buf = [0; 1024];
     while running {
         let (amt, _src) = socket.recv_from(&mut buf).expect("Did not recieve data");
         {
