@@ -7,95 +7,103 @@ use std::str;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
+use std::collections::VecDeque;
 
 mod settings;
 
 // MEMORY SEEMS TO GROW NOW, ODDLY
 
 fn main() {
+    // TODO: make this configurable in INI file, so folks can use the desired number of CPU cores
     let num_threads = 3;
+    // TODO: catch TERM signal and use this to gracefully shutdown
     let mut running = true;
-
-    let mut queue: Vec<String> = Vec::new();
+    // When this proxy receives StatsD messages, we push them on this vec/queue for processing in other threads
+    let mut queue: VecDeque<String> = VecDeque::new();
+    // Create an atomically-reference-counted mutex around our vec/queue
     let mutex = Arc::new(Mutex::new(queue));
+    // TODO: implement graceful shutdown and wait for these threads
+    // We store thread handles here.
     let mut handles = vec![];
 
     println!("Loading settings from config.ini");
     let settings = settings::Settings::load("config.ini");
     let a = format!("{}:{}", settings.bind_interface, settings.bind_port);
     println!(
-        "Listening on {}, sharding to: {:?}",
+        "Listening on {}\nSharding to: {:?}",
         a, settings.destinations
     );
 
     // PROCESSING THREADS
-    // StatsD metrics parsing helpers
-    //let separators = &[',', ':'];
-    let mut num_metrics = 0;
     let num_destinations = settings.destinations.len() as u64;
     for _ in 0..num_threads {
         let cloned_mutex = Arc::clone(&mutex);
         let destinations = settings.destinations.clone();
         let handle = thread::spawn(move || {
+            // A tally of the metrics we've proxied in this thread.
+            // I send this count to my downstream StatsD server to measure proxy performance
+            let mut num_metrics = 0;
+            // We'll wait if there's nothing in the vec/queue to process
             let ten_millis = time::Duration::from_millis(10);
+            // This RegEx pattern helps us split the StatsD metric into: MEASUREMENT TAG1 TAG2 ... TYPE+AND+VALUE
             let re = Regex::new(r"[,:]").expect("Failed to compile regex");
+            // We use this socket to send proxied+sharded metrics to a downstream StatsD server
             let sender = UdpSocket::bind("0.0.0.0:0").expect("Could not bind sender UDP socket");
 
             loop {
+                // Acquire a mutex lock and unwrap the associated vec/queue
                 let mut q = cloned_mutex.lock().unwrap();
                 if q.len() == 0 {
+                    // If no messages to process, release the mutex lock ASAP then wait
                     drop(q);
                     thread::sleep(ten_millis);
                     continue;
                 }
 
-                let message = q.pop().unwrap();
+                let message = q.pop_front().unwrap();
                 // Releasing the mutex ASAP gets us at least another 1 million messages processed
                 // per 10 seconds
                 drop(q);
 
-                // THESE COMMENTS ARE OLD, BUT LEAVING HERE FOR WHEN I'M READY TO ADDRESS
-                // TODO: how do we walk the buffer, noting end of metric+tags, looking for end of line
-                // TODO: parse the tags, sort and create a unique tag set
-                // TODO: shard the metric+tags to a destination statsd server
-                // TODO: queue up each line into the list appropriate for the destination server
-                // TODO: concurrently send to those when data has arrived, batching up as much as possible,
-                // but not for longer than 10 seconds
-                // TODO: skip utf8 checks for speed?
-                // TODO: properly handle invalid UTF8
-                // TODO: exclude bytes beyond amt .... slice of array somehow?
-                //let message = str::from_utf8(message).unwrap();
                 for line in message.lines() {
-                    // TODO: properly handle empty lines
-
                     // Splitting with Regular Expressions is so much faster than string split()
-                    // Split string with Regular Expression
+                    // Split StatsD metric into: MEASUREMENT TAG1 TAG2 ... TYPE|VALUE
                     let mut parts: Vec<&str> = re.split(line).collect();
 
-                    // TODO: handle case where parts isn't a Vec with 2+
+                    // If we don't have at least a measurement and TYPE|VALUE, go to next line
+                    if parts.len() < 2 {
+                        continue;
+                    }
 
-                    // If we ensure parts has expected num elements, these are safe
+                    // Remove the measurement ...
                     let measurement: &str = parts.remove(0);
+                    // Remove the type and value
                     let _measurement_type: &str = parts.pop().unwrap();
+                    // Left are tags ... sort them so we can ensure consistent sharding
                     parts.sort();
                     // Push measurement back onto the front
                     parts.insert(0, measurement);
+                    // Join measurement and tags into a string we can hash to shards
                     let shardable_metric = parts.join(",");
 
+                    // Hash into a shard number
                     // TODO: implement djb hash function to learn bitwise ops
                     let mut s = DefaultHasher::new();
                     shardable_metric.hash(&mut s);
-
                     /*
                     help: you can convert a `u64` to a `usize` and panic if the converted value doesn't fit
                     let shard_number: usize = (s.finish() % num_shards).try_into().unwrap();
                     */
                     let shard_number: usize = (s.finish() % num_destinations).try_into().unwrap();
 
+                    // Send the original line to the appropriate downstream server
+                    // to avoid the extra string op of pushing the type+value onto the shardable_metric string
                     sender
                         .send_to(line.as_bytes(), &destinations[shard_number])
                         .expect("Failed to send");
+                    // TODO: batch metrics up to MTU to reduce number of UDP packets we send
 
+                    // Increment tally of how many messages this thread has processed and sent
                     num_metrics += 1;
                 }
 
@@ -121,14 +129,14 @@ fn main() {
 
     // RECEIVING SOCKET
     let socket: UdpSocket = UdpSocket::bind(a).expect("Could not bind");
-    // TODO: choose something larger than max UDP packet size
+    // TODO: make this configurable in INI .... max_udp_packet_size or something
     let mut buf = [0; 1024];
     while running {
         let (amt, _src) = socket.recv_from(&mut buf).expect("Did not recieve data");
         {
             let mut q = mutex.lock().unwrap();
-            // TODO: is there a way to enqueue the buf directly? I'm guessing not.
-            q.push( String::from(str::from_utf8(&buf[..amt]).unwrap()) );
+            // TODO: is there a way to enqueue the buf directly?
+            q.push_back( String::from(str::from_utf8(&buf[..amt]).unwrap()) );
         }
     }
 }
