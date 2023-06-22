@@ -15,7 +15,7 @@ fn main() {
     // TODO: catch TERM signal and use this to gracefully shutdown
     let mut running = true;
     // When this proxy receives StatsD messages, we push them on this vec/queue for processing in other threads
-    let mut queue: VecDeque<String> = VecDeque::new();
+    let mut queue: VecDeque<Vec<u8>> = VecDeque::new();
     // Create an atomically-reference-counted mutex around our vec/queue
     let mutex = Arc::new(Mutex::new(queue));
     // TODO: implement graceful shutdown and wait for these threads
@@ -57,6 +57,7 @@ fn main() {
                 }
 
                 let message = q.pop_front().unwrap();
+                let message = str::from_utf8(&message).unwrap();
                 // Releasing the mutex ASAP gets us at least another 1 million messages processed
                 // per 10 seconds
                 drop(q);
@@ -131,7 +132,7 @@ fn main() {
         {
             let mut q = mutex.lock().unwrap();
             // TODO: is there a way to enqueue the buf directly?
-            q.push_back(String::from(str::from_utf8(&buf[..amt]).unwrap()));
+            q.push_back( buf[..amt].to_owned() );
         }
     }
 }
