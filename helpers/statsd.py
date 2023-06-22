@@ -3,7 +3,7 @@ import socket
 import time
 
 PROXY_IP = "192.168.1.120"
-PROXY_PORT = 5001
+PROXY_PORT = 8125
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 while 1:
