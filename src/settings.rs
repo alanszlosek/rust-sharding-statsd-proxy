@@ -6,7 +6,8 @@ use std::{
     net::{IpAddr, Ipv4Addr},
 };
 
-const DEFAULT_PORT: u32 = 5001;
+const DEFAULT_BIND_INTERFACE: &str = "0.0.0.0";
+const DEFAULT_BIND_PORT: u32 = 8125;
 
 pub struct Settings {
     pub bind_interface: String,
@@ -30,8 +31,8 @@ impl Settings {
         let re = Regex::new(r"(bind_interface|bind_port|destinations|threads)\s*=\s*([^\n]+)")
             .expect("Failed to compile regex");
 
-        let mut bind_interface = String::new();
-        let mut bind_port = DEFAULT_PORT;
+        let mut bind_interface = String::from(DEFAULT_BIND_INTERFACE);
+        let mut bind_port = DEFAULT_BIND_PORT;
         let mut destinations = Vec::<String>::new();
         let mut threads: u8 = 1;
 
@@ -44,7 +45,8 @@ impl Settings {
                     bind_port = cap[2].parse().unwrap();
                 }
                 "destinations" => {
-                    // TODO: ensure valid IP address and port
+                    // TODO: ensure valid IP address and port,
+                    // by parsing to IpAddr
                     destinations = cap[2].split(' ').map(|i| String::from(i)).collect()
                 }
                 "threads" => {
