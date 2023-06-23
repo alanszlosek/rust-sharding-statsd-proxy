@@ -41,7 +41,7 @@ Open `config.ini` in your editor.
 
 Set `bind_interface` and `bind_port` to the network interface and port you want to proxy to listen for StatsD messages on. 8125 is the common port for StatsD messages.
 
-Set `threads` to the number of CPU cores you want to use for processing. Each thread reads from the queue of messages, shards each message to determine which of N destination servers to send to, and then sends the message to the selected downstream StatsD server.
+Set `threads` to the number of CPU cores you want to use for processing. Each thread reads from the queue of messages, shards each message to determine which of N destination servers to send to, and then sends the message to the selected downstream StatsD server. NOTE: Increase this value if you notice memory usage growing. It likely means messages are arriving faster than they can be processed.
 
 Set `destinations` to the IP and PORT of one or more downstream StatsD servers, separated by whitespace. See the existing list of destinations as a guide. The proxy will shard and send messages to these servers.
 
@@ -63,11 +63,13 @@ Use Control+C to quit.
 
 # Performance anecdotes
 
-Original single-threaded version could process around 1.3-1.6 million messages per 10 seconds.
+## Messages per 10 seconds
 
-Two-thread version with channels could process around that much as well. But the problem with channels is they support multiple producers not multiple consumers. And we need more threads processing and sharding the messages that arrive.
+The original single-threaded version could process around 1.3-1.6 million messages per 10 seconds.
 
-In order to have multiple processing/sharding threads, I switched to using a Mutex and Arc around a Vec<String>. With 2 threads it was able to process 2.2 million, and three threads could process 2.4 million. So a definite improvement.
+The two-threaded version that used a channel to send messages to a processing thread could process around that much as well. But the problem with channels is they support multiple producers not multiple consumers, so that pattern won't scale. I wanted the ability to increase the number of processing threads to handle even greater volumes of messages.
+
+In order to have multiple processing/sharding threads, I switched to using a Mutex and Arc around a Vec<u8>. With 2 threads it was able to process around 2.0 million UDP messages. They were being sent by one instance of `helpers/statsd.py`, and proxy memory usage remained flat which indicated that the processing queue was not growing continuously; two threads were able to handle the message volume.
 
 I thought about sharding solely based on binary data, but since a StatsD message might have UTF8 characters (I'm guessing that's valid), it's better to leave in the conversion to UTF8. That way, when I split on comma/colon separators it all works correctly.
 
