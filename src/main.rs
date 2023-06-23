@@ -31,7 +31,7 @@ fn main() {
     );
 
     // PROCESSING THREADS
-    let num_destinations = settings.destinations.len() as u64;
+    let num_destinations = settings.destinations.len() as u32;
     for _ in 0..settings.threads {
         let cloned_mutex = Arc::clone(&mutex);
         let destinations = settings.destinations.clone();
@@ -83,15 +83,24 @@ fn main() {
                     // Join measurement and tags into a string we can hash to shards
                     let shardable_metric = parts.join(",");
 
-                    // Hash into a shard number
-                    // TODO: implement djb hash function to learn bitwise ops
-                    let mut s = DefaultHasher::new();
-                    shardable_metric.hash(&mut s);
+                    // djb2 hash
                     /*
-                    help: you can convert a `u64` to a `usize` and panic if the converted value doesn't fit
-                    let shard_number: usize = (s.finish() % num_shards).try_into().unwrap();
+                    unsigned long
+                    hash(unsigned char *str)
+                    {
+                        unsigned long hash = 5381;
+                        int c;
+                        while (c = *str++)
+                            hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+                        return hash;
+                    }
                     */
-                    let shard_number: usize = (s.finish() % num_destinations).try_into().unwrap();
+                    let mut hash: u32 = 5381;
+                    for char in shardable_metric.chars() {
+                        hash = (hash << 5).wrapping_add(hash).wrapping_add(char as u32);
+                    }
+                    let shard_number: usize = (hash % num_destinations).try_into().unwrap();
 
                     // Send the original line to the appropriate downstream server
                     // to avoid the extra string op of pushing the type+value onto the shardable_metric string

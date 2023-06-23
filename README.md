@@ -26,12 +26,12 @@ graph TD
     * IP addresses of downstream Telegraf+StatsD servers
 * Receives StatsD messages, 1 or more per UDP packet
 * Queues incoming StatsD packets, and uses processing threads to shard and send metrics to one of N downstream servers
+* Shard messages using djb2 hash algorithm with bitwise operations
 
 # Future Work
 
 * Configuration via commandline flags
 * Batch outgoing StatsD metrics up to max UDP packet size to reduce number of UDP packets
-* Implement my own hashing/sharding function to get a feel for bitwise operations in Rust. I'll likely start with Dan Bernstein's djb jash.
 
 # Running it
 
