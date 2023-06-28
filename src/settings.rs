@@ -1,66 +1,78 @@
 use regex::Regex;
 use std::fs::File;
 use std::{
+    io::Error,
     io::Read,
-    iter::FromIterator,
-    net::{IpAddr, Ipv4Addr},
 };
 
+//mod //cli;
+
+
 const DEFAULT_BIND_INTERFACE: &str = "0.0.0.0";
-const DEFAULT_BIND_PORT: u32 = 8125;
+const DEFAULT_BIND_PORT: u16 = 8125;
+const DEFAULT_THREADS: u8 = 1;
 
 pub struct Settings {
     pub bind_interface: String,
-    pub bind_port: u32,
+    pub bind_port: u16,
     pub destinations: Vec<String>,
     pub threads: u8,
 }
 
 impl Settings {
-    pub fn load<'a>(filename: &str) -> Self {
-        let mut contents = String::new();
-        let f = File::open(filename);
-        if f.is_ok() {
-            if !f.unwrap().read_to_string(&mut contents).is_ok() {
-                println!("Failed to read config.ini contents");
-            }
-        } else {
-            println!("Failed to read config.ini")
+    pub fn new() -> Self {
+        Settings {
+            bind_interface: String::from(DEFAULT_BIND_INTERFACE),
+            bind_port: DEFAULT_BIND_PORT,
+            destinations: Vec::<String>::new(),
+            threads: DEFAULT_THREADS,
         }
+    }
+    pub fn load<'a>(filename: &str) -> Result<Self, Error> {
+        let mut contents = String::new();
+        File::open(filename)?.read_to_string(&mut contents)?;
 
         let re = Regex::new(r"(bind_interface|bind_port|destinations|threads)\s*=\s*([^\n]+)")
             .expect("Failed to compile regex");
 
-        let mut bind_interface = String::from(DEFAULT_BIND_INTERFACE);
-        let mut bind_port = DEFAULT_BIND_PORT;
-        let mut destinations = Vec::<String>::new();
-        let mut threads: u8 = 1;
+        let mut settings = Settings::new();
 
         for cap in re.captures_iter(contents.as_str()) {
             match &cap[1] {
                 "bind_interface" => {
-                    bind_interface = String::from(&cap[2]);
+                    settings.bind_interface = String::from(&cap[2]);
                 }
                 "bind_port" => {
-                    bind_port = cap[2].parse().unwrap();
+                    settings.bind_port = cap[2].parse().unwrap();
                 }
                 "destinations" => {
                     // TODO: ensure valid IP address and port,
                     // by parsing to IpAddr
-                    destinations = cap[2].split(' ').map(|i| String::from(i)).collect()
+                    settings.destinations = cap[2].split(' ').map(|i| String::from(i)).collect()
                 }
                 "threads" => {
-                    threads = cap[2].parse().unwrap();
+                    settings.threads = cap[2].parse().unwrap();
                 }
                 _ => println!("Other: {:?}", cap),
             }
         }
 
-        Settings {
-            bind_interface: bind_interface,
-            bind_port: bind_port,
-            destinations: destinations,
-            threads: threads,
-        }
+        Ok(settings)
     }
+
+    pub fn merge(&mut self, args: crate::cli::Args) -> &Self {
+        if let Some(bind_interface) = args.bind_interface {
+            println!("Got bind_interface {}", bind_interface);
+            self.bind_interface = bind_interface;
+
+        }
+        if let Some(bind_port) = args.bind_port {
+            println!("Got bind_port {}", bind_port);
+            self.bind_port = bind_port;
+
+        }
+        self
+    }
+
+    // TODO: another function for merging from environment variables
 }

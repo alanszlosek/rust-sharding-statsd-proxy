@@ -1,29 +1,52 @@
+use clap::Parser;
 use regex::Regex;
-use std::collections::hash_map::DefaultHasher;
 use std::collections::VecDeque;
 use std::convert::TryInto;
-use std::hash::{Hash, Hasher};
 use std::net::UdpSocket;
 use std::str;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
 
+mod cli;
 mod settings;
 
+
+
 fn main() {
+    let args = cli::Args::parse();
+
+    /*
+    Override order
+
+    * Defaults ... overriden by
+    * Config file ... overridden by
+    * Environment variables ... overridden by
+    * CLI flags. When specified, CLI flags take precedence.
+    */
+
+    // TODO: figure out right override order
+    let mut settings = match settings::Settings::load("config.ini") {
+        Ok(s) => {
+            println!("Loaded settings from config.ini");
+            s
+        }
+        Err(_e) => settings::Settings::new(),
+    };
+    // settings.merge( environment )
+    settings.merge( args );
+
+
     // TODO: catch TERM signal and use this to gracefully shutdown
     let mut running = true;
     // When this proxy receives StatsD messages, we push them on this vec/queue for processing in other threads
-    let mut queue: VecDeque<Vec<u8>> = VecDeque::new();
+    let queue: VecDeque<Vec<u8>> = VecDeque::new();
     // Create an atomically-reference-counted mutex around our vec/queue
     let mutex = Arc::new(Mutex::new(queue));
     // TODO: implement graceful shutdown and wait for these threads
     // We store thread handles here.
     let mut handles = vec![];
 
-    println!("Loading settings from config.ini");
-    let settings = settings::Settings::load("config.ini");
     let a = format!("{}:{}", settings.bind_interface, settings.bind_port);
     println!(
         "Listening on {}\nThreads: {}\nSharding to: {:?}",
@@ -141,7 +164,7 @@ fn main() {
         {
             let mut q = mutex.lock().unwrap();
             // TODO: is there a way to enqueue the buf directly?
-            q.push_back( buf[..amt].to_owned() );
+            q.push_back(buf[..amt].to_owned());
         }
     }
 }
