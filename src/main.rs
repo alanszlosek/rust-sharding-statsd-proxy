@@ -9,9 +9,8 @@ use std::thread;
 use std::time;
 
 mod cli;
+mod hashing;
 mod settings;
-
-
 
 fn main() {
     let args = cli::Args::parse();
@@ -34,8 +33,7 @@ fn main() {
         Err(_e) => settings::Settings::new(),
     };
     // settings.merge( environment )
-    settings.merge( args );
-
+    settings.merge(args);
 
     // TODO: catch TERM signal and use this to gracefully shutdown
     let mut running = true;
@@ -95,36 +93,8 @@ fn main() {
                         continue;
                     }
 
-                    // Remove the measurement ...
-                    let measurement: &str = parts.remove(0);
-                    // Remove the type and value
-                    let _measurement_type: &str = parts.pop().unwrap();
-                    // Left are tags ... sort them so we can ensure consistent sharding
-                    parts.sort();
-                    // Push measurement back onto the front
-                    parts.insert(0, measurement);
-                    // Join measurement and tags into a string we can hash to shards
-                    let shardable_metric = parts.join(",");
-
-                    // djb2 hash
-                    /*
-                    unsigned long
-                    hash(unsigned char *str)
-                    {
-                        unsigned long hash = 5381;
-                        int c;
-                        while (c = *str++)
-                            hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-                        return hash;
-                    }
-                    */
-                    let mut hash: u32 = 5381;
-                    for char in shardable_metric.chars() {
-                        hash = (hash << 5).wrapping_add(hash).wrapping_add(char as u32);
-                    }
-                    let shard_number: usize = (hash % num_destinations).try_into().unwrap();
-
+                    let shard_number = hashing::hash2(parts, num_destinations);
+                    println!("Sharded {line} to {shard_number}");
                     // Send the original line to the appropriate downstream server
                     // to avoid the extra string op of pushing the type+value onto the shardable_metric string
                     sender
