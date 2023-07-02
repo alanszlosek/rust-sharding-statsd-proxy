@@ -1,12 +1,8 @@
 use regex::Regex;
 use std::fs::File;
-use std::{
-    io::Error,
-    io::Read,
-};
+use std::{io::Error, io::Read};
 
 //mod //cli;
-
 
 const DEFAULT_BIND_INTERFACE: &str = "0.0.0.0";
 const DEFAULT_BIND_PORT: u16 = 8125;
@@ -64,12 +60,10 @@ impl Settings {
         if let Some(bind_interface) = args.bind_interface {
             println!("Got bind_interface {}", bind_interface);
             self.bind_interface = bind_interface;
-
         }
         if let Some(bind_port) = args.bind_port {
             println!("Got bind_port {}", bind_port);
             self.bind_port = bind_port;
-
         }
         self
     }

@@ -1,26 +1,14 @@
 import os
 import socket
-import time
 
-PROXY_IP = "192.168.1.120"
-PROXY_PORT = 8125
+PROXY_IP = "127.0.0.1" # "192.168.1.120"
+PROXY_PORT = os.environ['PORT'] if 'PORT' in os.environ else 8125
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+f = open("../messages.txt", 'r')
+# precompute:. convert lines to byte arrays for speed
+lines = [line.encode('utf8') for line in f.readlines()]
+
 while 1:
-    # LOGINS
-    # variation 1
-    s = 'users.logins,host=%s,country=US:1|c' % (socket.gethostname(),)
-    sock.sendto(s.encode('utf8'), (PROXY_IP, PROXY_PORT))
-    # variation 2 - different tag order
-    s = 'users.logins,country=US,host=%s:1|c' % (socket.gethostname(),)
-    sock.sendto(s.encode('utf8'), (PROXY_IP, PROXY_PORT))
-
-    # PURCHASE
-    s = 'users.purchase,country=US,host=%s:1|c' % (socket.gethostname(),)
-    sock.sendto(s.encode('utf8'), (PROXY_IP, PROXY_PORT))
-
-    # ADD TO CART
-    s = 'users.add_to_cart,country=US,host=%s:1|c' % (socket.gethostname(),)
-    sock.sendto(s.encode('utf8'), (PROXY_IP, PROXY_PORT))
-
-    #time.sleep(1)
+    for line in lines:
+        sock.sendto(line, (PROXY_IP, PROXY_PORT))

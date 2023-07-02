@@ -2,8 +2,9 @@ import os
 import socket
 import time
 
+PORT = int(os.environ['PORT']) if 'PORT' in os.environ else 5002
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind(("0.0.0.0", 5002))
+sock.bind(("0.0.0.0", PORT))
 
 i = 0
 while True:

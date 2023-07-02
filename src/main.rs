@@ -9,9 +9,8 @@ use std::thread;
 use std::time;
 
 mod cli;
+mod hashing;
 mod settings;
-
-
 
 fn main() {
     let args = cli::Args::parse();
@@ -24,8 +23,6 @@ fn main() {
     * Environment variables ... overridden by
     * CLI flags. When specified, CLI flags take precedence.
     */
-
-    // TODO: figure out right override order
     let mut settings = match settings::Settings::load("config.ini") {
         Ok(s) => {
             println!("Loaded settings from config.ini");
@@ -34,11 +31,10 @@ fn main() {
         Err(_e) => settings::Settings::new(),
     };
     // settings.merge( environment )
-    settings.merge( args );
-
+    settings.merge(args);
 
     // TODO: catch TERM signal and use this to gracefully shutdown
-    let mut running = true;
+    let running = true;
     // When this proxy receives StatsD messages, we push them on this vec/queue for processing in other threads
     let queue: VecDeque<Vec<u8>> = VecDeque::new();
     // Create an atomically-reference-counted mutex around our vec/queue
@@ -54,7 +50,7 @@ fn main() {
     );
 
     // PROCESSING THREADS
-    let num_destinations = settings.destinations.len() as u32;
+    let num_destinations = settings.destinations.len() as u64;
     for _ in 0..settings.threads {
         let cloned_mutex = Arc::clone(&mutex);
         let destinations = settings.destinations.clone();
@@ -88,45 +84,18 @@ fn main() {
                 for line in message.lines() {
                     // Splitting with Regular Expressions is so much faster than string split()
                     // Split StatsD metric into: MEASUREMENT TAG1 TAG2 ... TYPE|VALUE
-                    let mut parts: Vec<&str> = re.split(line).collect();
+                    let parts: Vec<&str> = re.split(line).collect();
 
                     // If we don't have at least a measurement and TYPE|VALUE, go to next line
                     if parts.len() < 2 {
                         continue;
                     }
 
-                    // Remove the measurement ...
-                    let measurement: &str = parts.remove(0);
-                    // Remove the type and value
-                    let _measurement_type: &str = parts.pop().unwrap();
-                    // Left are tags ... sort them so we can ensure consistent sharding
-                    parts.sort();
-                    // Push measurement back onto the front
-                    parts.insert(0, measurement);
-                    // Join measurement and tags into a string we can hash to shards
-                    let shardable_metric = parts.join(",");
-
-                    // djb2 hash
-                    /*
-                    unsigned long
-                    hash(unsigned char *str)
-                    {
-                        unsigned long hash = 5381;
-                        int c;
-                        while (c = *str++)
-                            hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-                        return hash;
-                    }
-                    */
-                    let mut hash: u32 = 5381;
-                    for char in shardable_metric.chars() {
-                        hash = (hash << 5).wrapping_add(hash).wrapping_add(char as u32);
-                    }
-                    let shard_number: usize = (hash % num_destinations).try_into().unwrap();
+                    let hash_value = hashing::hash3(parts);
+                    let shard_number: usize = (hash_value % num_destinations).try_into().unwrap();
 
                     // Send the original line to the appropriate downstream server
-                    // to avoid the extra string op of pushing the type+value onto the shardable_metric string
+                    // to avoid unnecessary string ops on parts vector
                     sender
                         .send_to(line.as_bytes(), &destinations[shard_number])
                         .expect("Failed to send");
