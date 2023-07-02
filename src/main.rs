@@ -1,5 +1,4 @@
 use clap::Parser;
-use regex::Regex;
 use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::net::UdpSocket;

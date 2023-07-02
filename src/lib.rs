@@ -7,7 +7,6 @@ mod hashing;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use regex::Regex;
     use std::io::Read;
     use std::fs::File;
     use test::Bencher;
@@ -28,7 +27,7 @@ mod tests {
 
             let h = hashing::Hashing::new();
             for line in contents.lines() {
-                let hash_value = h.hash1(line);
+                let _ = h.hash1(line);
             }
         });
     }
@@ -49,7 +48,7 @@ mod tests {
 
             let h = hashing::Hashing::new();
             for line in contents.lines() {
-                let i = h.hash2(line);
+                let _ = h.hash2(line);
             }
         });
     }
@@ -71,7 +70,7 @@ mod tests {
 
             let h = hashing::Hashing::new();
             for line in contents.lines() {
-                let i = h.hash3(line);
+                let _ = h.hash3(line);
             }
         });
     }
@@ -79,7 +78,6 @@ mod tests {
     // compare against value of djb2 in C (see helpers/djb2) on same shardable portion of metric
     #[test]
     fn test_hashing() {
-        let re = Regex::new(r"[,:]").expect("Failed to compile regex");
         let contents = "dgpnfnxw.qxufgnlwp,sesdaofncycmbum=eodzjc,hggfvghceyfz=lnelpjdhpqj,gugdtstao=oxbodp:2|c";
         let h = hashing::Hashing::new();
         let hash_value = h.hash3(contents);
