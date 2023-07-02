@@ -23,8 +23,6 @@ fn main() {
     * Environment variables ... overridden by
     * CLI flags. When specified, CLI flags take precedence.
     */
-
-    // TODO: figure out right override order
     let mut settings = match settings::Settings::load("config.ini") {
         Ok(s) => {
             println!("Loaded settings from config.ini");
@@ -36,7 +34,7 @@ fn main() {
     settings.merge(args);
 
     // TODO: catch TERM signal and use this to gracefully shutdown
-    let mut running = true;
+    let running = true;
     // When this proxy receives StatsD messages, we push them on this vec/queue for processing in other threads
     let queue: VecDeque<Vec<u8>> = VecDeque::new();
     // Create an atomically-reference-counted mutex around our vec/queue
@@ -52,7 +50,7 @@ fn main() {
     );
 
     // PROCESSING THREADS
-    let num_destinations = settings.destinations.len() as u32;
+    let num_destinations = settings.destinations.len() as u64;
     for _ in 0..settings.threads {
         let cloned_mutex = Arc::clone(&mutex);
         let destinations = settings.destinations.clone();
@@ -86,17 +84,18 @@ fn main() {
                 for line in message.lines() {
                     // Splitting with Regular Expressions is so much faster than string split()
                     // Split StatsD metric into: MEASUREMENT TAG1 TAG2 ... TYPE|VALUE
-                    let mut parts: Vec<&str> = re.split(line).collect();
+                    let parts: Vec<&str> = re.split(line).collect();
 
                     // If we don't have at least a measurement and TYPE|VALUE, go to next line
                     if parts.len() < 2 {
                         continue;
                     }
 
-                    let shard_number = hashing::hash2(parts, num_destinations);
-                    println!("Sharded {line} to {shard_number}");
+                    let hash_value = hashing::hash3(parts);
+                    let shard_number: usize = (hash_value % num_destinations).try_into().unwrap();
+
                     // Send the original line to the appropriate downstream server
-                    // to avoid the extra string op of pushing the type+value onto the shardable_metric string
+                    // to avoid unnecessary string ops on parts vector
                     sender
                         .send_to(line.as_bytes(), &destinations[shard_number])
                         .expect("Failed to send");
