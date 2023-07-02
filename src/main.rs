@@ -60,10 +60,11 @@ fn main() {
             let mut num_metrics = 0;
             // We'll wait if there's nothing in the vec/queue to process
             let ten_millis = time::Duration::from_millis(10);
-            // This RegEx pattern helps us split the StatsD metric into: MEASUREMENT TAG1 TAG2 ... TYPE+AND+VALUE
-            let re = Regex::new(r"[,:]").expect("Failed to compile regex");
+            
             // We use this socket to send proxied+sharded metrics to a downstream StatsD server
             let sender = UdpSocket::bind("0.0.0.0:0").expect("Could not bind sender UDP socket");
+
+            let h = hashing::Hashing::new();
 
             loop {
                 // Acquire a mutex lock and unwrap the associated vec/queue
@@ -82,16 +83,7 @@ fn main() {
                 drop(q);
 
                 for line in message.lines() {
-                    // Splitting with Regular Expressions is so much faster than string split()
-                    // Split StatsD metric into: MEASUREMENT TAG1 TAG2 ... TYPE|VALUE
-                    let parts: Vec<&str> = re.split(line).collect();
-
-                    // If we don't have at least a measurement and TYPE|VALUE, go to next line
-                    if parts.len() < 2 {
-                        continue;
-                    }
-
-                    let hash_value = hashing::hash3(parts);
+                    let hash_value = h.hash3(line);
                     let shard_number: usize = (hash_value % num_destinations).try_into().unwrap();
 
                     // Send the original line to the appropriate downstream server
