@@ -26,10 +26,9 @@ mod tests {
                 Err(e) => println!("Failed to open messages.txt {}", e)
             }
 
-            let re = Regex::new(r"[,:]").expect("Failed to compile regex");
+            let h = hashing::Hashing::new();
             for line in contents.lines() {
-                let parts: Vec<&str> = re.split(line).collect();
-                let hash_value = hashing::hash1(parts);
+                let hash_value = h.hash1(line);
             }
         });
     }
@@ -48,10 +47,9 @@ mod tests {
                 Err(e) => println!("Failed to open messages.txt {}", e)
             }
 
-            let re = Regex::new(r"[,:]").expect("Failed to compile regex");
+            let h = hashing::Hashing::new();
             for line in contents.lines() {
-                let parts: Vec<&str> = re.split(line).collect();
-                let i = hashing::hash2(parts);
+                let i = h.hash2(line);
             }
         });
     }
@@ -71,10 +69,9 @@ mod tests {
                 Err(e) => println!("Failed to open messages.txt {}", e)
             }
 
-            let re = Regex::new(r"[,:]").expect("Failed to compile regex");
+            let h = hashing::Hashing::new();
             for line in contents.lines() {
-                let parts: Vec<&str> = re.split(line).collect();
-                let i = hashing::hash3(parts);
+                let i = h.hash3(line);
             }
         });
     }
@@ -84,10 +81,9 @@ mod tests {
     fn test_hashing() {
         let re = Regex::new(r"[,:]").expect("Failed to compile regex");
         let contents = "dgpnfnxw.qxufgnlwp,sesdaofncycmbum=eodzjc,hggfvghceyfz=lnelpjdhpqj,gugdtstao=oxbodp:2|c";
-        let parts: Vec<&str> = re.split(contents).collect();
-        let hash_value = hashing::hash3(parts);
+        let h = hashing::Hashing::new();
+        let hash_value = h.hash3(contents);
         println!("Hash value: {}", hash_value);
         assert_eq!(hash_value, 7513145795220795972);
-
     }
 }
