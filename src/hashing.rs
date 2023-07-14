@@ -1,20 +1,16 @@
-
 use regex::Regex;
 
-
-
 pub struct Hashing {
-    re: regex::Regex
+    re: regex::Regex,
 }
 
 impl Hashing {
     pub fn new() -> Self {
         Hashing {
             // This RegEx pattern helps us split the StatsD metric into: MEASUREMENT TAG1 TAG2 ... TYPE+AND+VALUE
-            re: Regex::new(r"[,:]").expect("Failed to compile regex")
+            re: Regex::new(r"[,:]").expect("Failed to compile regex"),
         }
     }
-
 
     pub fn hash1(&self, message: &str) -> u64 {
         let mut parts: Vec<&str> = self.re.split(message).collect();
@@ -53,7 +49,6 @@ impl Hashing {
         }
         hash
     }
-
 
     // With this logic we can process 100k more messages per 10 seconds on my machine
     pub fn hash3(&self, message: &str) -> u64 {

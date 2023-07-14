@@ -2,7 +2,6 @@ use regex::Regex;
 use std::fs::File;
 use std::{io::Error, io::Read};
 
-//mod //cli;
 
 const DEFAULT_BIND_INTERFACE: &str = "0.0.0.0";
 const DEFAULT_BIND_PORT: u16 = 8125;
@@ -15,6 +14,9 @@ pub struct Settings {
     pub threads: u8,
 }
 
+// Clippy suggests we implement Default for Settings ...
+// TODO: look into what and what
+
 impl Settings {
     pub fn new() -> Self {
         Settings {
@@ -24,7 +26,7 @@ impl Settings {
             threads: DEFAULT_THREADS,
         }
     }
-    pub fn load<'a>(filename: &str) -> Result<Self, Error> {
+    pub fn load(filename: &str) -> Result<Self, Error> {
         let mut contents = String::new();
         File::open(filename)?.read_to_string(&mut contents)?;
 
@@ -64,6 +66,10 @@ impl Settings {
         if let Some(bind_port) = args.bind_port {
             println!("Got bind_port {}", bind_port);
             self.bind_port = bind_port;
+        }
+        if let Some(threads) = args.threads {
+            println!("Got threads {}", threads);
+            self.threads = threads;
         }
         self
     }
