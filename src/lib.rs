@@ -68,7 +68,7 @@ pub fn run(settings: settings::Settings) {
                 drop(q);
 
                 for line in message.lines() {
-                    let hash_value = h.hash3(line);
+                    let hash_value = h.hash5(line);
                     let shard_number: usize = (hash_value % num_destinations).try_into().unwrap();
 
                     // Send the original line to the appropriate downstream server
@@ -179,12 +179,50 @@ mod tests {
         });
     }
 
+    #[bench]
+    fn hash4(b: &mut Bencher) {
+        b.iter(|| {
+            let mut contents = String::new();
+            match File::open("messages.txt") {
+                Ok(mut file) => match file.read_to_string(&mut contents) {
+                    Ok(_) => println!("Yay"),
+                    Err(_) => println!("Failed to read messages.txt"),
+                },
+                Err(e) => println!("Failed to open messages.txt {}", e),
+            }
+
+            let h = hashing::Hashing::new();
+            for line in contents.lines() {
+                let _ = h.hash4(line);
+            }
+        });
+    }
+
+    #[bench]
+    fn hash5(b: &mut Bencher) {
+        b.iter(|| {
+            let mut contents = String::new();
+            match File::open("messages.txt") {
+                Ok(mut file) => match file.read_to_string(&mut contents) {
+                    Ok(_) => println!("Yay"),
+                    Err(_) => println!("Failed to read messages.txt"),
+                },
+                Err(e) => println!("Failed to open messages.txt {}", e),
+            }
+
+            let h = hashing::Hashing::new();
+            for line in contents.lines() {
+                let _ = h.hash5(line);
+            }
+        });
+    }
+
     // compare against value of djb2 in C (see helpers/djb2) on same shardable portion of metric
     #[test]
     fn test_hashing() {
         let contents = "dgpnfnxw.qxufgnlwp,sesdaofncycmbum=eodzjc,hggfvghceyfz=lnelpjdhpqj,gugdtstao=oxbodp:2|c";
         let h = hashing::Hashing::new();
-        let hash_value = h.hash3(contents);
+        let hash_value = h.hash5(contents);
         println!("Hash value: {}", hash_value);
         assert_eq!(hash_value, 7513145795220795972);
     }
